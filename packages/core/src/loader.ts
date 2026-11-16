@@ -74,7 +74,7 @@ export async function resolvePlugin(
   );
 }
 
-/** Load and register all plugins declared in `specs` into a PluginRegistry. */
+/** Load and mount all plugins declared in `specs` into a PluginRegistry. */
 export async function loadPlugins(
   specs: PluginSpec[],
   registry = new PluginRegistry(),
@@ -82,7 +82,7 @@ export async function loadPlugins(
 ): Promise<PluginRegistry> {
   for (const spec of specs) {
     const { plugin, options } = await resolvePlugin(spec, cwd);
-    await plugin.setup(registry, options);
+    await registry.mount(plugin, options);
   }
   return registry;
 }

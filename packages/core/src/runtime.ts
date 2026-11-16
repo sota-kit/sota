@@ -54,6 +54,21 @@ export class AgentRuntime {
     this.defaultMemory = options.memory;
   }
 
+  /** Create an isolated child AgentRuntime that inherits parent capabilities. */
+  createScope(overrides: Omit<RuntimeOptions, 'registry'> = {}): AgentRuntime {
+    return new AgentRuntime({
+      registry: this.registry.createScope(),
+      model: overrides.model ?? this.defaultModel,
+      engine: overrides.engine ?? this.defaultEngine,
+      memory: overrides.memory ?? this.defaultMemory,
+    });
+  }
+
+  /** Unmount a plugin by name and roll back all capabilities/hooks it registered. */
+  async unloadPlugin(name: string): Promise<boolean> {
+    return this.registry.unmount(name);
+  }
+
   /** Start long-lived plugins (e.g., UI servers, IM bots, queue consumers). */
   async start(): Promise<void> {
     for (const hook of this.registry.getStartHooks()) {

@@ -250,4 +250,96 @@ describe('@sota/core', () => {
     expect(textEv && textEv.type === 'text.delta' ? textEv.content : '').toBe('executed:1+1');
     expect(lifecycleLog).toEqual(['started:local', 'stopped']);
   });
+
+  test('createScope isolates child agent capabilities while inheriting parent capabilities', async () => {
+    const traced: string[] = [];
+    const root = createRuntime({
+      registry: new PluginRegistry()
+        .provide(ModelCapability, 'base', makeEchoModel())
+        .provide(EngineCapability, 'base', makeSimpleEngine())
+        .add(TraceCapability, {
+          id: 'root-tracer',
+          onAgentEvent(ev) {
+            traced.push(ev.type);
+          },
+        }),
+    });
+
+    const financeAgent = root.createScope();
+    financeAgent.registry.provide(ToolCapability, 'finance', {
+      id: 'finance',
+      async listTools() {
+        return [
+          {
+            name: 'calc_tax',
+            description: 'Calculate tax',
+            inputSchema: z.object({ value: z.number() }),
+          },
+        ];
+      },
+      async execute(_name, args) {
+        return Number(args.value) * 0.1;
+      },
+    });
+
+    const supportAgent = root.createScope();
+
+    const financeEvents: AgentEvent[] = [];
+    for await (const ev of financeAgent.stream({ input: 'please use-tool' })) {
+      financeEvents.push(ev);
+    }
+    const financeTool = financeEvents.find((e) => e.type === 'tool.result');
+    expect(financeTool && financeTool.type === 'tool.result' ? financeTool.result : null).toBe(4.2);
+
+    // Support scope & root should NOT see financeAgent's tool
+    const supportEvents: AgentEvent[] = [];
+    for await (const ev of supportAgent.stream({ input: 'please use-tool' })) {
+      supportEvents.push(ev);
+    }
+    expect(supportEvents.some((e) => e.type === 'tool.result')).toBe(false);
+    expect(root.registry.listKeys(ToolCapability)).toEqual([]);
+    // Both inherited root tracer
+    expect(traced.length).toBeGreaterThan(0);
+  });
+
+  test('mount and unloadPlugin cleanly roll back capabilities, hooks, and run dispose callbacks', async () => {
+    const cleanupOrder: string[] = [];
+    const registry = new PluginRegistry();
+
+    const plugin = definePlugin({
+      name: 'hot-plugin',
+      version: '0.1.0',
+      setup(reg) {
+        reg
+          .provide(ModelCapability, 'hot-model', makeEchoModel())
+          .provide(EngineCapability, 'hot-engine', makeSimpleEngine())
+          .onStart(() => {
+            cleanupOrder.push('started');
+          })
+          .onDispose(() => {
+            cleanupOrder.push('onDispose');
+          });
+
+        return () => {
+          cleanupOrder.push('returnedCleanup');
+        };
+      },
+    });
+
+    await registry.mount(plugin);
+    expect(registry.listKeys(ModelCapability)).toEqual(['hot-model']);
+    expect(registry.listMountedPlugins()).toEqual(['hot-plugin']);
+
+    const runtime = createRuntime({ registry });
+    await runtime.start();
+    expect(cleanupOrder).toEqual(['started']);
+
+    const unloaded = await runtime.unloadPlugin('hot-plugin');
+    expect(unloaded).toBe(true);
+    expect(registry.listKeys(ModelCapability)).toEqual([]);
+    expect(registry.listKeys(EngineCapability)).toEqual([]);
+    expect(registry.getStartHooks()).toEqual([]);
+    expect(registry.listMountedPlugins()).toEqual([]);
+    expect(cleanupOrder).toEqual(['started', 'returnedCleanup', 'onDispose']);
+  });
 });
