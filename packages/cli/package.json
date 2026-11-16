@@ -1,0 +1,19 @@
+{
+  "name": "@sota/cli",
+  "version": "0.1.0",
+  "description": "CLI for initializing Sota projects and installing/managing external Sota plugins.",
+  "type": "module",
+  "bin": {
+    "sota": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sota/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  }
+}

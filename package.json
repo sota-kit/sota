@@ -1,0 +1,12 @@
+{
+  "name": "sota-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun --filter '@sota/*' typecheck"
+  }
+}
